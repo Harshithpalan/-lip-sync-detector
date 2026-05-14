@@ -1,0 +1,9 @@
+{
+  "name": "lipsync-studio",
+  "version": "1.0.0",
+  "description": "A real-time lip-sync studio using face-api.js",
+  "scripts": {
+    "dev": "npx serve ."
+  },
+  "dependencies": {}
+}

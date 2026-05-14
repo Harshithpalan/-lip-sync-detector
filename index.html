@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIPSYNC STUDIO</title>
+<script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Boogaloo&family=Outfit:wght@200;300;400;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:     #f5f0e8;
+  --ink:    #111018;
+  --yellow: #ffe145;
+  --pink:   #ff3d7f;
+  --cyan:   #00d9c8;
+  --orange: #ff6b35;
+  --purple: #7c3aff;
+  --green:  #22c55e;
+}
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); }
+
+body {
+  font-family: 'Outfit', sans-serif;
+  color: var(--ink);
+  display: grid;
+  grid-template-rows: 60px 1fr;
+  height: 100vh;
+}
+
+/* Halftone bg */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 18px 18px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── HEADER ──────────────────────────────────────── */
+header {
+  position: relative; z-index: 100;
+  background: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  border-bottom: 3px solid var(--yellow);
+}
+
+.logo {
+  font-family: 'Boogaloo', cursive;
+  font-size: 1.6rem;
+  letter-spacing: 0.05em;
+  color: var(--yellow);
+  text-shadow: 2px 2px 0 var(--orange);
+}
+.logo span { color: var(--pink); text-shadow: 2px 2px 0 var(--purple); }
+
+.status-tag {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border: 2px solid #333;
+  border-radius: 2px;
+  color: #666;
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 600;
+}
+.status-tag .pip { width: 7px; height: 7px; border-radius: 50%; background: #444; transition: all 0.3s; }
+.status-tag.live { color: var(--yellow); border-color: var(--yellow); }
+.status-tag.live .pip { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); animation: pip-blink 1s ease-in-out infinite; }
+@keyframes pip-blink { 0%,100%{opacity:1}50%{opacity:0.3} }
+
+/* ── MAIN LAYOUT ─────────────────────────────────── */
+.app {
+  position: relative; z-index: 1;
+  display: grid;
+  grid-template-columns: 260px 1fr 260px;
+  overflow: hidden;
+}
+
+/* ── LEFT: WEBCAM ───────────────────────────────── */
+.cam-panel {
+  background: var(--ink);
+  border-right: 3px solid var(--ink);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cam-label {
+  font-family: 'Boogaloo', cursive;
+  font-size: 0.9rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  padding: 8px 12px 6px;
+  border-bottom: 2px solid #222;
+  flex-shrink: 0;
+}
+
+.cam-wrap {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+video { display: none; }
+
+canvas#cam-feed {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1);
+  filter: brightness(0.85) contrast(1.1) saturate(0.6);
+}
+
+canvas#face-overlay {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
+}
+
+.no-face-msg {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Boogaloo', cursive;
+  font-size: 1rem;
+  color: rgba(255,255,255,0.28);
+  text-align: center;
+  line-height: 1.6;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.no-face-msg.hidden { opacity: 0; }
+
+/* Mouth meter */
+.mouth-section {
+  padding: 10px 12px;
+  border-top: 2px solid #222;
+  flex-shrink: 0;
+}
+
+.meter-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Boogaloo', cursive;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 5px;
+}
+.meter-row span { color: var(--yellow); font-size: 0.85rem; }
+
+.mouth-bar {
+  height: 12px;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mouth-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--yellow), var(--pink));
+  width: 0%;
+  transition: width 0.06s linear;
+  box-shadow: 0 0 10px rgba(255,225,69,0.5);
+}
+
+.phoneme-row {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.phoneme-lbl { font-family: 'Boogaloo', cursive; font-size: 0.6rem; letter-spacing: 0.08em; color: #555; text-transform: uppercase; }
+.phoneme-val {
+  font-family: 'Boogaloo', cursive;
+  font-size: 1.5rem;
+  color: var(--cyan);
+  text-shadow: 1px 1px 0 var(--purple);
+  transition: color 0.1s;
+  min-width: 44px;
+}
+
+/* ── CENTER: STAGE ───────────────────────────────── */
+.stage {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 3px solid var(--ink);
+  border-right: 3px solid var(--ink);
+}
+
+.stage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 3px solid var(--ink);
+  background: var(--yellow);
+  flex-shrink: 0;
+}
+
+.stage-title {
+  font-family: 'Boogaloo', cursive;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+}
+
+.char-tabs {
+  display: flex;
+  gap: 0;
+}
+.char-tab {
+  font-family: 'Boogaloo', cursive;
+  font-size: 0.72rem;
+  padding: 5px 12px;
+  border: 2px solid var(--ink);
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.12s;
+  margin-left: -2px;
+  position: relative;
+}
+.char-tab:hover { background: var(--pink); color: white; }
+.char-tab.active { background: var(--ink); color: var(--yellow); z-index: 1; }
+.char-tab:first-child { border-radius: 3px 0 0 3px; }
+.char-tab:last-child  { border-radius: 0 3px 3px 0; }
+
+.char-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+canvas#char-canvas { display: block; }
+
+.char-badge {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Boogaloo', cursive;
+  font-size: 0.78rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--yellow);
+  padding: 4px 14px;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.wave-section {
+  height: 68px;
+  border-top: 3px solid var(--ink);
+  background: var(--ink);
+  flex-shrink: 0;
+}
+canvas#wave-canvas { width: 100%; height: 100%; display: block; }
+
+/* ── RIGHT: CONTROLS ─────────────────────────────── */
+.ctrl-panel {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.ctrl-panel::-webkit-scrollbar { width: 4px; }
+.ctrl-panel::-webkit-scrollbar-thumb { background: var(--ink); }
+
+.csec {
+  padding: 10px 12px;
+  border-bottom: 3px solid var(--ink);
+}
+
+.csec-title {
+  font-family: 'Boogaloo', cursive;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.csec-title::before {
+  content: '';
+  display: block;
+  width: 9px; height: 9px;
+  background: var(--pink);
+  border: 2px solid var(--ink);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* Sliders */
+.sl-row { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.sl-row:last-child { margin-bottom: 0; }
+.sl-head { display: flex; justify-content: space-between; }
+.sl-name { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.06em; }
+.sl-val  { font-family: 'Boogaloo', cursive; font-size: 0.78rem; color: var(--pink); }
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%; height: 4px;
+  background: var(--ink);
+  outline: none;
+  border-radius: 2px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* Color dots */
+.col-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 5px; }
+.col-dot {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  border: 2px solid var(--ink);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.col-dot:hover { transform: scale(1.2); }
+.col-dot.active { transform: scale(1.15); box-shadow: 0 0 0 2px white, 0 0 0 4px var(--ink); }
+
+/* Stat cards */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.stat-card {
+  background: var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  padding: 7px 9px;
+}
+.stat-lbl { font-size: 0.48rem; letter-spacing: 0.18em; text-transform: uppercase; color: #555; }
+.stat-val { font-family: 'Boogaloo', cursive; font-size: 1.3rem; color: var(--yellow); line-height: 1.1; }
+
+/* Emoji log */
+.emoji-log { display: flex; flex-wrap: wrap; gap: 3px; min-height: 32px; }
+.e-item { font-size: 1.05rem; animation: pop 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes pop { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+
+/* Action buttons */
+.act-btn {
+  font-family: 'Boogaloo', cursive;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  width: 100%;
+  padding: 9px;
+  border: 2px solid var(--ink);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 3px;
+  cursor: pointer;
+  margin-bottom: 5px;
+  transition: all 0.12s;
+  text-align: center;
+}
+.act-btn:hover { background: var(--ink); color: var(--yellow); }
+.act-btn.on { background: var(--ink); color: var(--yellow); }
+
+/* Loading */
+#loading {
+  position: fixed; inset: 0;
+  background: var(--ink);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 1.2rem; z-index: 9998;
+  transition: opacity 0.6s;
+}
+#loading.gone { opacity: 0; pointer-events: none; }
+
+.load-logo {
+  font-family: 'Boogaloo', cursive;
+  font-size: 3rem;
+  letter-spacing: 0.05em;
+  color: var(--yellow);
+  text-shadow: 4px 4px 0 var(--orange);
+  animation: jitter 0.12s ease-in-out infinite alternate;
+}
+.load-logo span { color: var(--pink); text-shadow: 4px 4px 0 var(--purple); }
+@keyframes jitter { from{transform:rotate(-0.5deg)} to{transform:rotate(0.5deg)} }
+
+.load-msg { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: #555; }
+.load-bar { width: 200px; height: 4px; background: #222; border-radius: 2px; border: 2px solid #333; overflow: hidden; }
+.load-fill { height: 100%; background: var(--yellow); width: 0%; animation: lf 2.5s ease forwards; }
+@keyframes lf { to { width: 100%; } }
+
+/* Snap flash */
+.snap-flash { position: fixed; inset: 0; background: white; z-index: 9999; opacity: 0; pointer-events: none; }
+.snap-flash.go { animation: sf 0.35s ease forwards; }
+@keyframes sf { 0%{opacity:0.9}100%{opacity:0} }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="load-logo">LIP<span>SYNC</span></div>
+  <div class="load-msg" id="load-msg">Loading face-api models…</div>
+  <div class="load-bar"><div class="load-fill"></div></div>
+</div>
+<div class="snap-flash" id="snap-flash"></div>
+
+<header>
+  <div class="logo">LIP<span>SYNC</span> STUDIO</div>
+  <div class="status-tag" id="status-tag">
+    <div class="pip"></div>
+    <span id="status-text">Loading</span>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- LEFT -->
+  <div class="cam-panel">
+    <div class="cam-label">📷 Live Input</div>
+    <div class="cam-wrap">
+      <video id="video" autoplay muted playsinline></video>
+      <canvas id="cam-feed"></canvas>
+      <canvas id="face-overlay"></canvas>
+      <div class="no-face-msg" id="no-face-msg">Face your<br>camera to begin</div>
+    </div>
+    <div class="mouth-section">
+      <div class="meter-row">Mouth open <span id="mouth-pct-txt">0%</span></div>
+      <div class="mouth-bar"><div class="mouth-bar-fill" id="mouth-bar-fill"></div></div>
+      <div class="phoneme-row">
+        <div class="phoneme-lbl">Shape</div>
+        <div class="phoneme-val" id="phoneme-val">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="stage">
+    <div class="stage-top">
+      <div class="stage-title">🎭 Character Stage</div>
+      <div class="char-tabs" id="char-tabs">
+        <button class="char-tab active" data-char="face">😄 Cartoon</button>
+        <button class="char-tab" data-char="robot">🤖 Robot</button>
+        <button class="char-tab" data-char="wolf">🐺 Wolf</button>
+        <button class="char-tab" data-char="wave">〰️ Wave</button>
+      </div>
+    </div>
+    <div class="char-stage" id="char-stage">
+      <canvas id="char-canvas"></canvas>
+      <div class="char-badge" id="char-badge">Cartoon Face</div>
+    </div>
+    <div class="wave-section">
+      <canvas id="wave-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="ctrl-panel">
+
+    <div class="csec">
+      <div class="csec-title">Mouth Tuning</div>
+      <div class="sl-row">
+        <div class="sl-head"><span class="sl-name">Sensitivity</span><span class="sl-val" id="sv-sens">60</span></div>
+        <input type="range" id="sl-sens" min="10" max="100" value="60">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span class="sl-name">Smoothing</span><span class="sl-val" id="sv-smooth">70</span></div>
+        <input type="range" id="sl-smooth" min="0" max="95" value="70">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span class="sl-name">Threshold</span><span class="sl-val" id="sv-thresh">8</span></div>
+        <input type="range" id="sl-thresh" min="1" max="30" value="8">
+      </div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">Character Color</div>
+      <div class="col-grid" id="col-grid">
+        <div class="col-dot active" data-color="#ffe145" style="background:#ffe145"></div>
+        <div class="col-dot" data-color="#ff3d7f" style="background:#ff3d7f"></div>
+        <div class="col-dot" data-color="#00d9c8" style="background:#00d9c8"></div>
+        <div class="col-dot" data-color="#ff6b35" style="background:#ff6b35"></div>
+        <div class="col-dot" data-color="#7c3aff" style="background:#7c3aff"></div>
+        <div class="col-dot" data-color="#22c55e" style="background:#22c55e"></div>
+        <div class="col-dot" data-color="#f0f0f0" style="background:#f0f0f0"></div>
+        <div class="col-dot" data-color="#ff1493" style="background:#ff1493"></div>
+        <div class="col-dot" data-color="#00bfff" style="background:#00bfff"></div>
+        <div class="col-dot" data-color="#ffa500" style="background:#ffa500"></div>
+      </div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">Animation</div>
+      <div class="sl-row">
+        <div class="sl-head"><span class="sl-name">Bounce</span><span class="sl-val" id="sv-bounce">50</span></div>
+        <input type="range" id="sl-bounce" min="0" max="100" value="50">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span class="sl-name">Wobble</span><span class="sl-val" id="sv-wobble">40</span></div>
+        <input type="range" id="sl-wobble" min="0" max="100" value="40">
+      </div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">Session Stats</div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-lbl">Open Count</div><div class="stat-val" id="st-opens">0</div></div>
+        <div class="stat-card"><div class="stat-lbl">Peak Open</div><div class="stat-val" id="st-peak">0%</div></div>
+        <div class="stat-card"><div class="stat-lbl">Avg Open</div><div class="stat-val" id="st-avg">0%</div></div>
+        <div class="stat-card"><div class="stat-lbl">FPS</div><div class="stat-val" id="st-fps">–</div></div>
+      </div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">Phoneme Log</div>
+      <div class="emoji-log" id="emoji-log"></div>
+    </div>
+
+    <div class="csec">
+      <div class="csec-title">Actions</div>
+      <button class="act-btn" id="btn-snap">📷 Screenshot</button>
+      <button class="act-btn" id="btn-mirror">↔ Mirror Cam</button>
+      <button class="act-btn" id="btn-lm">🔵 Landmarks</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+const cfg = {
+  char: 'face', color: '#ffe145',
+  sensitivity: 60, smoothing: 70, threshold: 8,
+  bounce: 50, wobble: 40,
+  mirrored: true, showLM: false,
+};
+
+const mouth = { raw: 0, smooth: 0, open: false, openCount: 0, peakPct: 0, sumPct: 0, frames: 0 };
+const perf  = { fps: 0, frames: 0, last: performance.now() };
+const WAVE_LEN = 200;
+const waveHist = new Float32Array(WAVE_LEN);
+const anim = { t: 0, blink: 0, blinkTimer: 2.5 };
+let lastDetection = null, detFrame = 0;
+
+// ══════════════════════════════════════════════════════
+// ELEMENTS
+// ══════════════════════════════════════════════════════
+const video   = document.getElementById('video');
+const camCvs  = document.getElementById('cam-feed');
+const faceOvl = document.getElementById('face-overlay');
+const charCvs = document.getElementById('char-canvas');
+const waveCvs = document.getElementById('wave-canvas');
+const cCtx    = camCvs.getContext('2d');
+const fCtx    = faceOvl.getContext('2d');
+const charCtx = charCvs.getContext('2d');
+const wCtx    = waveCvs.getContext('2d');
+
+function resizeChar() {
+  const r = document.getElementById('char-stage').getBoundingClientRect();
+  charCvs.width  = r.width;
+  charCvs.height = r.height;
+  waveCvs.width  = waveCvs.parentElement.offsetWidth;
+  waveCvs.height = 68;
+}
+window.addEventListener('resize', resizeChar);
+
+// ══════════════════════════════════════════════════════
+// PHONEME CLASSIFIER
+// ══════════════════════════════════════════════════════
+function phoneme(pct) {
+  if (pct < 5)  return { lbl:'—',   e:'😶' };
+  if (pct < 18) return { lbl:'M/P', e:'😐' };
+  if (pct < 32) return { lbl:'E/I', e:'😁' };
+  if (pct < 50) return { lbl:'A',   e:'😮' };
+  if (pct < 70) return { lbl:'O',   e:'😲' };
+  return              { lbl:'AH!', e:'😱' };
+}
+
+// ══════════════════════════════════════════════════════
+// DETECTION LOOP
+// ══════════════════════════════════════════════════════
+async function detLoop() {
+  requestAnimationFrame(detLoop);
+  perf.frames++;
+  const now = performance.now();
+  if (now - perf.last >= 1000) {
+    perf.fps = perf.frames; perf.frames = 0; perf.last = now;
+    document.getElementById('st-fps').textContent = perf.fps;
+  }
+  if (video.readyState < 2) return;
+
+  cCtx.save();
+  cCtx.translate(camCvs.width, 0); cCtx.scale(-1,1);
+  cCtx.drawImage(video, 0, 0, camCvs.width, camCvs.height);
+  cCtx.restore();
+
+  detFrame++;
+  if (detFrame % 2 === 0) {
+    lastDetection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.4 }))
+      .withFaceLandmarks(true);
+  }
+  fCtx.clearRect(0, 0, faceOvl.width, faceOvl.height);
+  if (!lastDetection) {
+    document.getElementById('no-face-msg').classList.remove('hidden');
+    mouth.raw = 0;
+  } else {
+    document.getElementById('no-face-msg').classList.add('hidden');
+    processMouth(lastDetection.landmarks);
+    if (cfg.showLM) drawLM(lastDetection.landmarks);
+  }
+  updateMouthUI();
+  drawWave();
+}
+
+// ══════════════════════════════════════════════════════
+// MOUTH MEASUREMENT
+// ══════════════════════════════════════════════════════
+function processMouth(lm) {
+  const pts = lm.positions;
+  const W = camCvs.width;
+  const mx = i => ({ x: W - pts[i].x, y: pts[i].y });
+  const openH = mx(57).y - mx(51).y;
+  const mouthW = Math.max(1, Math.abs(mx(54).x - mx(48).x));
+  const rawPct = Math.min(100, Math.max(0, openH / mouthW) * 200 * (cfg.sensitivity/60));
+  mouth.raw = rawPct;
+  const sf = cfg.smoothing / 100;
+  mouth.smooth = mouth.smooth * sf + rawPct * (1 - sf);
+  mouth.frames++; mouth.sumPct += mouth.smooth;
+  if (mouth.smooth > mouth.peakPct) mouth.peakPct = mouth.smooth;
+  const wasOpen = mouth.open;
+  mouth.open = mouth.smooth > cfg.threshold;
+  if (mouth.open && !wasOpen) {
+    mouth.openCount++;
+    document.getElementById('st-opens').textContent = mouth.openCount;
+    logPhoneme(phoneme(mouth.smooth).e);
+  }
+  waveHist.copyWithin(0, 1);
+  waveHist[WAVE_LEN-1] = mouth.smooth / 100;
+  // Draw mouth outline on overlay
+  const mirrorPts = i => ({ x: W - pts[i].x, y: pts[i].y });
+  drawMouthLine([48,49,50,51,52,53,54], mirrorPts);
+  drawMouthLine([54,55,56,57,58,59,48], mirrorPts);
+}
+
+function drawMouthLine(idxs, mp) {
+  const pct = mouth.smooth/100;
+  const col = `hsl(${55 - pct*55},100%,60%)`;
+  fCtx.save();
+  fCtx.strokeStyle = col; fCtx.lineWidth = 2.5;
+  fCtx.shadowColor = col; fCtx.shadowBlur = 8;
+  fCtx.beginPath();
+  idxs.forEach((i,j) => j===0 ? fCtx.moveTo(mp(i).x,mp(i).y) : fCtx.lineTo(mp(i).x,mp(i).y));
+  fCtx.stroke();
+  fCtx.restore();
+}
+
+function drawLM(lm) {
+  const W = camCvs.width;
+  fCtx.fillStyle = 'rgba(255,225,69,0.75)';
+  lm.positions.forEach(p => {
+    fCtx.beginPath(); fCtx.arc(W-p.x, p.y, 1.5, 0, Math.PI*2); fCtx.fill();
+  });
+}
+
+function updateMouthUI() {
+  const pct = Math.round(mouth.smooth);
+  document.getElementById('mouth-bar-fill').style.width = `${pct}%`;
+  document.getElementById('mouth-pct-txt').textContent = `${pct}%`;
+  document.getElementById('st-peak').textContent = `${Math.round(mouth.peakPct)}%`;
+  if (mouth.frames > 0) document.getElementById('st-avg').textContent = `${Math.round(mouth.sumPct/mouth.frames)}%`;
+  document.getElementById('phoneme-val').textContent = phoneme(pct).e;
+}
+
+function drawWave() {
+  const W = waveCvs.width, H = waveCvs.height;
+  wCtx.fillStyle = '#0a0a10'; wCtx.fillRect(0,0,W,H);
+  const bw = W / WAVE_LEN;
+  for (let i=0;i<WAVE_LEN;i++) {
+    const v = waveHist[i];
+    const bh = v * H * 0.9;
+    const hue = 55 - v*55;
+    wCtx.fillStyle = `hsla(${hue},100%,60%,${(i/WAVE_LEN)*0.8+0.2})`;
+    wCtx.fillRect(i*bw, H-bh, bw-1, bh);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CHARACTER LOOP
+// ══════════════════════════════════════════════════════
+function charLoop() {
+  requestAnimationFrame(charLoop);
+  anim.t += 1/60;
+  anim.blinkTimer -= 1/60;
+  if (anim.blinkTimer <= 0) { anim.blink = 1; anim.blinkTimer = 2.5 + Math.random()*2; }
+  anim.blink = Math.max(0, anim.blink - 0.13);
+  const mp = mouth.smooth / 100;
+  const bounce = (cfg.bounce/100) * mp * 18;
+  const wobble = (cfg.wobble/100) * Math.sin(anim.t * 12) * mp * 8;
+  charCtx.clearRect(0, 0, charCvs.width, charCvs.height);
+  switch(cfg.char) {
+    case 'face':  drawFace(mp, bounce, wobble);  break;
+    case 'robot': drawRobot(mp, bounce, wobble); break;
+    case 'wolf':  drawWolf(mp, bounce, wobble);  break;
+    case 'wave':  drawWaveCreature(mp, bounce, wobble); break;
+  }
+}
+
+// ── HELPERS ──────────────────────────────────────────
+function rr(ctx, x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+// ── CARTOON FACE ─────────────────────────────────────
+function drawFace(mp, bounce, wobble) {
+  const W=charCvs.width, H=charCvs.height;
+  const cx=W/2+wobble, cy=H/2-bounce*0.5;
+  const R=Math.min(W,H)*0.32, c=cfg.color;
+  charCtx.save(); charCtx.translate(cx, cy);
+  // Shadow
+  charCtx.fillStyle='rgba(0,0,0,0.1)';
+  charCtx.beginPath(); charCtx.ellipse(0,R+8+bounce*0.3,R*0.8,R*0.14,0,0,Math.PI*2); charCtx.fill();
+  // Face
+  charCtx.fillStyle=c; charCtx.strokeStyle='#111'; charCtx.lineWidth=4;
+  charCtx.shadowColor=c; charCtx.shadowBlur=28;
+  charCtx.beginPath(); charCtx.arc(0,0,R,0,Math.PI*2); charCtx.fill(); charCtx.stroke();
+  charCtx.shadowBlur=0;
+  // Eyes
+  const eyeY=-R*0.2, erx=R*0.27, ery=R*0.21, bs=1-anim.blink*0.95;
+  [-1,1].forEach(dx=>{
+    const ex=dx*R*0.34;
+    charCtx.save(); charCtx.scale(1,bs);
+    charCtx.fillStyle='#fff'; charCtx.strokeStyle='#111'; charCtx.lineWidth=2.5;
+    charCtx.beginPath(); charCtx.ellipse(ex,eyeY/bs,erx,ery,0,0,Math.PI*2); charCtx.fill(); charCtx.stroke();
+    charCtx.fillStyle='#111'; charCtx.beginPath(); charCtx.arc(ex,eyeY/bs,erx*0.42,0,Math.PI*2); charCtx.fill();
+    charCtx.fillStyle='#fff'; charCtx.beginPath(); charCtx.arc(ex+erx*0.2,eyeY/bs-ery*0.25,erx*0.14,0,Math.PI*2); charCtx.fill();
+    charCtx.restore();
+  });
+  // Brows
+  const bl=R*0.08*mp;
+  charCtx.strokeStyle='#111'; charCtx.lineWidth=4; charCtx.lineCap='round';
+  [-1,1].forEach(dx=>{ charCtx.beginPath(); charCtx.moveTo(dx*R*0.18,eyeY-ery-10-bl); charCtx.lineTo(dx*R*0.44,eyeY-ery-8-bl); charCtx.stroke(); });
+  // Mouth
+  const my=R*0.32, mw=R*0.5, oa=mp*R*0.55;
+  charCtx.fillStyle='#1a0000'; charCtx.strokeStyle='#111'; charCtx.lineWidth=3;
+  charCtx.beginPath();
+  charCtx.moveTo(-mw,my); charCtx.quadraticCurveTo(0,my+oa*0.4,mw,my);
+  charCtx.quadraticCurveTo(0,my+mw*0.38+oa,-mw,my); charCtx.closePath();
+  charCtx.fill(); charCtx.stroke();
+  if (mp>0.25) {
+    charCtx.fillStyle='#fff'; charCtx.fillRect(-mw*0.7,my,mw*1.4,oa*0.44);
+    charCtx.fillStyle='#ff8080'; charCtx.beginPath(); charCtx.ellipse(0,my+oa*0.65,mw*0.5,oa*0.34,0,0,Math.PI*2); charCtx.fill();
+  }
+  // Cheeks
+  [-1,1].forEach(dx=>{
+    const g=charCtx.createRadialGradient(dx*R*0.55,R*0.08,0,dx*R*0.55,R*0.08,R*0.22);
+    g.addColorStop(0,'rgba(255,120,120,0.28)'); g.addColorStop(1,'rgba(255,120,120,0)');
+    charCtx.fillStyle=g; charCtx.beginPath(); charCtx.ellipse(dx*R*0.55,R*0.08,R*0.22,R*0.14,0,0,Math.PI*2); charCtx.fill();
+  });
+  charCtx.restore();
+}
+
+// ── ROBOT ─────────────────────────────────────────────
+function drawRobot(mp, bounce, wobble) {
+  const W=charCvs.width,H=charCvs.height,cx=W/2+wobble*0.5,cy=H/2,S=Math.min(W,H)*0.3,c=cfg.color;
+  charCtx.save(); charCtx.translate(cx,cy-bounce*0.3);
+  // Antenna
+  charCtx.strokeStyle=c; charCtx.lineWidth=4;
+  charCtx.beginPath(); charCtx.moveTo(0,-S*1.1); charCtx.lineTo(0,-S*1.42); charCtx.stroke();
+  charCtx.fillStyle=c; charCtx.shadowColor=c; charCtx.shadowBlur=20;
+  charCtx.beginPath(); charCtx.arc(0,-S*1.47,8+mp*6,0,Math.PI*2); charCtx.fill();
+  charCtx.shadowBlur=0;
+  // Head
+  charCtx.strokeStyle='#111'; charCtx.lineWidth=4; charCtx.fillStyle='#1a1a2e';
+  rr(charCtx,-S,-S*1.1,S*2,S*1.5,14); charCtx.fill(); charCtx.stroke();
+  // LED eyes
+  const ew=S*0.52,eh=S*0.17;
+  [-1,1].forEach(dx=>{
+    const ex=dx*S*0.35,ey=-S*0.46;
+    charCtx.fillStyle='#111'; rr(charCtx,ex-ew*0.5,ey-eh*0.5,ew,eh,4); charCtx.fill();
+    const fw=ew*(0.28+mp*0.72);
+    charCtx.fillStyle=c; charCtx.shadowColor=c; charCtx.shadowBlur=12;
+    rr(charCtx,ex-ew*0.5+2,ey-eh*0.5+2,fw,eh-4,2); charCtx.fill(); charCtx.shadowBlur=0;
+  });
+  // Grille mouth
+  const my=-S*0.1,mw=S*0.88,mh=S*0.45+mp*S*0.4;
+  charCtx.fillStyle='#0a0a14'; charCtx.strokeStyle='#111'; charCtx.lineWidth=3;
+  rr(charCtx,-mw/2,my,mw,mh,8); charCtx.fill(); charCtx.stroke();
+  for(let i=1;i<4;i++){
+    charCtx.strokeStyle='#1e1e30'; charCtx.lineWidth=1.5;
+    charCtx.beginPath(); charCtx.moveTo(-mw/2+7,my+i*mh/4); charCtx.lineTo(mw/2-7,my+i*mh/4); charCtx.stroke();
+  }
+  if(mp>0.18){
+    const n=Math.ceil(mp*4);
+    for(let i=0;i<n;i++){
+      const t2=anim.t*8-i*0.5,amp=mp*mh*0.34;
+      charCtx.strokeStyle=c; charCtx.lineWidth=2.2; charCtx.shadowColor=c; charCtx.shadowBlur=8;
+      charCtx.beginPath();
+      for(let x=-mw/2+8;x<=mw/2-8;x+=3){
+        const y=my+mh*0.5+Math.sin((x/mw)*Math.PI*3+t2)*amp*(0.3+0.7*(1-Math.abs(x/(mw/2))));
+        x===-mw/2+8?charCtx.moveTo(x,y):charCtx.lineTo(x,y);
+      }
+      charCtx.stroke(); charCtx.shadowBlur=0;
+    }
+  }
+  charCtx.restore();
+}
+
+// ── WOLF ─────────────────────────────────────────────
+function drawWolf(mp, bounce, wobble) {
+  const W=charCvs.width,H=charCvs.height,cx=W/2+wobble*0.5,cy=H/2+10,S=Math.min(W,H)*0.28,c=cfg.color;
+  charCtx.save(); charCtx.translate(cx,cy-bounce*0.5);
+  // Body
+  charCtx.fillStyle='#2a2a3a'; charCtx.strokeStyle='#111'; charCtx.lineWidth=3.5;
+  charCtx.beginPath(); charCtx.ellipse(0,S*0.7,S*0.65,S*0.44,0,0,Math.PI*2); charCtx.fill(); charCtx.stroke();
+  charCtx.save(); charCtx.rotate(-mp*0.45);
+  // Ears
+  [-1,1].forEach(dx=>{
+    charCtx.fillStyle='#2a2a3a'; charCtx.strokeStyle='#111'; charCtx.lineWidth=3;
+    charCtx.beginPath(); charCtx.moveTo(dx*S*0.4,-S*0.85); charCtx.lineTo(dx*S*0.8,-S*1.5); charCtx.lineTo(dx*S*0.12,-S); charCtx.closePath(); charCtx.fill(); charCtx.stroke();
+    charCtx.fillStyle=c; charCtx.globalAlpha=0.48;
+    charCtx.beginPath(); charCtx.moveTo(dx*S*0.41,-S*0.9); charCtx.lineTo(dx*S*0.73,-S*1.38); charCtx.lineTo(dx*S*0.16,-S*1.02); charCtx.closePath(); charCtx.fill();
+    charCtx.globalAlpha=1;
+  });
+  // Head
+  charCtx.fillStyle='#2a2a3a'; charCtx.strokeStyle='#111'; charCtx.lineWidth=3.5;
+  charCtx.beginPath(); charCtx.arc(0,-S*0.46,S,0,Math.PI*2); charCtx.fill(); charCtx.stroke();
+  // Snout
+  charCtx.fillStyle='#3a3a4a';
+  charCtx.beginPath(); charCtx.ellipse(0,-S*0.03,S*0.46,S*0.29,0,0,Math.PI*2); charCtx.fill(); charCtx.stroke();
+  // Eyes
+  charCtx.shadowColor=c; charCtx.shadowBlur=18*(0.5+mp*0.5);
+  [-1,1].forEach(dx=>{
+    charCtx.fillStyle=c;
+    charCtx.beginPath(); charCtx.ellipse(dx*S*0.38,-S*0.58,S*0.14,S*0.1*(1-anim.blink*0.9),0,0,Math.PI*2); charCtx.fill();
+    charCtx.fillStyle='#111'; charCtx.shadowBlur=0;
+    charCtx.beginPath(); charCtx.arc(dx*S*0.38,-S*0.58,S*0.055,0,Math.PI*2); charCtx.fill();
+  });
+  charCtx.shadowBlur=0;
+  // Nose
+  charCtx.fillStyle='#111'; charCtx.beginPath(); charCtx.ellipse(0,-S*0.12,S*0.13,S*0.09,0,0,Math.PI*2); charCtx.fill();
+  // Jaw
+  const jd=mp*S*0.5;
+  charCtx.fillStyle='#0d0005'; charCtx.strokeStyle='#111'; charCtx.lineWidth=2.5;
+  charCtx.beginPath();
+  charCtx.moveTo(-S*0.37,S*0.18); charCtx.quadraticCurveTo(0,S*0.22+jd*0.3,S*0.37,S*0.18);
+  charCtx.quadraticCurveTo(0,S*0.25+jd,-S*0.37,S*0.18); charCtx.closePath();
+  charCtx.fill(); charCtx.stroke();
+  if(mp>0.2){
+    charCtx.fillStyle='#fff';
+    [[-0.18,0.22],[0.18,0.22]].forEach(([dx,dy])=>{
+      charCtx.beginPath(); charCtx.moveTo(dx*S,dy*S+2); charCtx.lineTo((dx-0.06)*S,(dy+0.17*mp)*S); charCtx.lineTo((dx+0.06)*S,(dy+0.17*mp)*S); charCtx.closePath(); charCtx.fill();
+    });
+  }
+  if(mp>0.7){
+    charCtx.strokeStyle=c; charCtx.lineWidth=2.5; charCtx.shadowColor=c; charCtx.shadowBlur=18;
+    charCtx.beginPath(); charCtx.arc(-S*0.1,-S*2.0,18+mp*14,0,Math.PI*2); charCtx.stroke(); charCtx.shadowBlur=0;
+  }
+  charCtx.restore(); charCtx.restore();
+}
+
+// ── WAVE CREATURE ─────────────────────────────────────
+function drawWaveCreature(mp, bounce, wobble) {
+  const W=charCvs.width,H=charCvs.height,cx=W/2,cy=H/2,c=cfg.color,t=anim.t;
+  charCtx.save(); charCtx.translate(cx,cy-bounce);
+  const rings=6;
+  for(let r=rings;r>=1;r--){
+    const frac=r/rings, baseR=frac*Math.min(W,H)*0.37*(1+mp*0.38), pts=120;
+    charCtx.beginPath();
+    for(let i=0;i<=pts;i++){
+      const a=(i/pts)*Math.PI*2;
+      const w=Math.sin(a*3+t*2.5+r)*mp*baseR*0.22+Math.sin(a*5-t*1.8+r*0.7)*mp*baseR*0.13+Math.cos(a*2+t*1.2+r*1.2)*mp*baseR*0.1+Math.sin(wobble*0.1+a)*baseR*0.04;
+      const rad=baseR+w;
+      const x=Math.cos(a)*rad, y=Math.sin(a)*rad;
+      i===0?charCtx.moveTo(x,y):charCtx.lineTo(x,y);
+    }
+    charCtx.closePath();
+    const hue=(frac*120+t*30)%360, lt=40+frac*24, al=0.07+frac*0.12+mp*0.1;
+    charCtx.fillStyle=`hsla(${hue},90%,${lt}%,${al})`;
+    charCtx.strokeStyle=`hsla(${hue},90%,${lt+20}%,${0.5+mp*0.38})`;
+    charCtx.lineWidth=1.5+frac*2+mp*3;
+    charCtx.shadowColor=`hsl(${hue},100%,70%)`; charCtx.shadowBlur=7+mp*18;
+    charCtx.fill(); charCtx.stroke(); charCtx.shadowBlur=0;
+  }
+  // Central eye
+  const er=20+mp*18, g=charCtx.createRadialGradient(0,0,0,0,0,er);
+  g.addColorStop(0,c); g.addColorStop(0.4,c+'88'); g.addColorStop(1,c+'00');
+  charCtx.fillStyle=g; charCtx.shadowColor=c; charCtx.shadowBlur=28;
+  charCtx.beginPath(); charCtx.arc(0,0,er,0,Math.PI*2); charCtx.fill(); charCtx.shadowBlur=0;
+  charCtx.fillStyle='#000'; charCtx.beginPath(); charCtx.ellipse(0,0,7,7*(1-anim.blink*0.9),0,0,Math.PI*2); charCtx.fill();
+  // Orbiting particles
+  for(let i=0;i<5;i++){
+    const a=t*(1+i*0.3)+i*(Math.PI*2/5), or=(58+mp*38)+i*11;
+    const px=Math.cos(a)*or, py=Math.sin(a)*or*0.6;
+    charCtx.fillStyle=c; charCtx.shadowColor=c; charCtx.shadowBlur=11;
+    charCtx.beginPath(); charCtx.arc(px,py,3+mp*5,0,Math.PI*2); charCtx.fill(); charCtx.shadowBlur=0;
+  }
+  charCtx.restore();
+}
+
+// ══════════════════════════════════════════════════════
+// PHONEME LOG
+// ══════════════════════════════════════════════════════
+let lastE='';
+function logPhoneme(e) {
+  if(e===lastE) return; lastE=e;
+  const log=document.getElementById('emoji-log');
+  const el=document.createElement('div'); el.className='e-item'; el.textContent=e;
+  log.prepend(el);
+  if(log.children.length>24) log.lastChild.remove();
+}
+
+// ══════════════════════════════════════════════════════
+// UI EVENTS
+// ══════════════════════════════════════════════════════
+document.getElementById('char-tabs').addEventListener('click', e=>{
+  const btn=e.target.closest('.char-tab'); if(!btn||!btn.dataset.char) return;
+  document.querySelectorAll('.char-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); cfg.char=btn.dataset.char;
+  const names={face:'Cartoon Face',robot:'DJ Robot',wolf:'Howling Wolf',wave:'Wave Creature'};
+  document.getElementById('char-badge').textContent=names[cfg.char];
+});
+
+document.getElementById('col-grid').addEventListener('click', e=>{
+  const d=e.target.closest('.col-dot'); if(!d) return;
+  document.querySelectorAll('.col-dot').forEach(x=>x.classList.remove('active'));
+  d.classList.add('active'); cfg.color=d.dataset.color;
+});
+
+[['sens','sensitivity'],['smooth','smoothing'],['thresh','threshold'],['bounce','bounce'],['wobble','wobble']].forEach(([id,key])=>{
+  document.getElementById(`sl-${id}`).addEventListener('input',function(){
+    document.getElementById(`sv-${id}`).textContent=this.value;
+    cfg[key]=+this.value;
+  });
+});
+
+document.getElementById('btn-mirror').addEventListener('click',function(){
+  cfg.mirrored=!cfg.mirrored;
+  camCvs.style.transform=cfg.mirrored?'scaleX(-1)':'';
+  faceOvl.style.transform=cfg.mirrored?'scaleX(-1)':'';
+  this.classList.toggle('on',cfg.mirrored);
+  this.textContent=cfg.mirrored?'↔ Mirror Cam':'↔ Raw Cam';
+});
+
+document.getElementById('btn-lm').addEventListener('click',function(){
+  cfg.showLM=!cfg.showLM;
+  this.classList.toggle('on',cfg.showLM);
+  this.textContent=cfg.showLM?'🟡 Landmarks':'🔵 Landmarks';
+});
+
+document.getElementById('btn-snap').addEventListener('click',()=>{
+  const snap=document.createElement('canvas');
+  snap.width=charCvs.width; snap.height=charCvs.height;
+  const s=snap.getContext('2d');
+  s.fillStyle='#f5f0e8'; s.fillRect(0,0,snap.width,snap.height);
+  s.drawImage(charCvs,0,0);
+  const fl=document.getElementById('snap-flash');
+  fl.classList.add('go'); setTimeout(()=>fl.classList.remove('go'),400);
+  snap.toBlob(blob=>{
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`lipsync_${Date.now()}.png`; a.click();
+  });
+});
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+async function init() {
+  // Using vladmandic's face-api weights as they are reliably hosted with CORS support
+  const URL = 'https://vladmandic.github.io/face-api/model/';
+  document.getElementById('load-msg').textContent = 'Loading face detector...';
+  await faceapi.nets.tinyFaceDetector.loadFromUri(URL);
+  document.getElementById('load-msg').textContent = 'Loading landmarks...';
+  // Note: faceLandmark68TinyNet is the correct property for the tiny landmark model
+  await faceapi.nets.faceLandmark68TinyNet.loadFromUri(URL);
+  document.getElementById('load-msg').textContent = 'Starting camera...';
+  const stream=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720}});
+  video.srcObject=stream;
+  await new Promise(r=>video.onloadedmetadata=r);
+  video.play();
+  camCvs.width=faceOvl.width=video.videoWidth;
+  camCvs.height=faceOvl.height=video.videoHeight;
+  resizeChar();
+  document.getElementById('loading').classList.add('gone');
+  document.getElementById('status-tag').classList.add('live');
+  document.getElementById('status-text').textContent='Live';
+  detLoop();
+  charLoop();
+}
+
+window.addEventListener('load',async()=>{
+  try {
+    if (window.location.protocol === 'file:') {
+      throw new Error("SECURITY ERROR: You are opening this file directly. You MUST use a local server (like 'npx serve .') for the camera and AI models to work.");
+    }
+    if (typeof faceapi === 'undefined') {
+      throw new Error("LIBRARY ERROR: face-api.js failed to load. Check your internet connection.");
+    }
+    await init();
+  }
+  catch(err){
+    console.error(err);
+    document.getElementById('loading').innerHTML=`
+      <div style="font-family:'Boogaloo',cursive;font-size:2rem;color:#ffe145">Startup Error</div>
+      <div style="font-size:0.7rem;color:#ff3d7f;font-weight:600;margin-top:0.8rem;max-width:300px;line-height:1.4;text-align:center">${err.message}</div>
+      <div style="font-size:0.55rem;color:#555;margin-top:1rem;text-transform:uppercase;letter-spacing:0.1em">Please run 'npm run dev' and visit the local URL</div>`;
+  }
+});
+</script>
+</body>
+</html>
